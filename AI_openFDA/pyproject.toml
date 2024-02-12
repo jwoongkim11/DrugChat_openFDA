@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "ai-openfda"
+version = "0.1.0"
+description = ""
+authors = ["Jay <rlawodnd1127@gmail.com>"]
+readme = "README.md"
+packages = [{include = "ai_openfda", from = "src"}]
+
+[tool.poetry.dependencies]
+python = "^3.10"
+openai = "^1.8.0"
+faiss-cpu = "^1.7.4"
+langchain = "^0.1.1"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
