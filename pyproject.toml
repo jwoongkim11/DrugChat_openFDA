@@ -8,9 +8,12 @@ packages = [{include = "ai_openfda", from = "src"}]
 
 [tool.poetry.dependencies]
 python = "^3.10"
+python-dotenv = "^1.0.1"
 openai = "^1.8.0"
 faiss-cpu = "^1.7.4"
 langchain = "^0.1.1"
+langchain-community = "^0.0.19"
+sentence_transformers = "^2.3.1"
 
 
 [build-system]

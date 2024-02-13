@@ -1,4 +1,6 @@
+python-dotenv
 langchain-community
 langchain
 openai
 faiss-cpu
+sentence_transformers
