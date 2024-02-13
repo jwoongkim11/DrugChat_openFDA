@@ -8,4 +8,4 @@ parser.add_argument("question", type=str, help="The question to query the openFD
 args = parser.parse_args()
 
 response = chain.invoke(args.question)
-print(response)
+print(response.content)
