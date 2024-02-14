@@ -32,7 +32,7 @@ The DrugChat_openFDA is a tool designed to answer users' questions with official
    ```
 
 2. Insert API_KEY
-: Open .env file and insert your OpenAI API key.
+: Open .env file and insert your OpenAI API key and OpenFDA API key.
    ```bash
     OPENAI_API_KEY = "Your-OpenAI-API-Key-Here"
     OPENFDA_API_KEY = "Your-OpenAI-API-Key-Here"
