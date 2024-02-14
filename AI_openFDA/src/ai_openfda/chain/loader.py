@@ -5,15 +5,16 @@ import config
 
 print("load vector_db start")
 
-model_kwargs = {'device': 'cpu'}
+model_kwargs = {'device': 'cpu'} # set 'cuda' if you have a GPU
 encode_kwargs = {'normalize_embeddings': True} # set True to compute cosine similarity
 
+#Loading embedding model
 llm_embedder_model = HuggingFaceBgeEmbeddings(
     model_name=config.LLM_EMBEDDER_MODEL_NAME,
     model_kwargs=model_kwargs,
     encode_kwargs=encode_kwargs,
     query_instruction="Represent this query for retrieving relevant documents: "
-) #qa용 임베딩 instruction을 생성
+) 
 # The directory where your vector database is saved
 persist_directory = config.DB_FAISS_PATH
 

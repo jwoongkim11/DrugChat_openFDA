@@ -2,8 +2,8 @@ from openai import OpenAI
 import json
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.output_parsers import StrOutputParser
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
-from config import OPENFDA_API_KEY, common_source
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough, RunnableParallel
+from config import OPENFDA_API_KEY
 from chain import loader
 from chain.prompts import Property_example_question, Property_example_response, Property_example_tool_response, Searchterm_example_question, Searchterm_example_response, Searchterm_example_tool_response
 from abc import ABC, abstractmethod
@@ -11,6 +11,7 @@ import requests
 
 client = OpenAI()
 
+#Defining tools to be used inside chatGPT
 tools_for_property = [
     {
         "type": "function",
@@ -33,6 +34,33 @@ tools_for_property = [
                     },
                 },
                 "required": ["properties"]
+            }
+        }
+    }
+]
+
+tools_for_url = [
+    {
+        "type": "function",
+        "function": {
+            "name": "search_query_generator",
+            "description": """
+            This function returns array of urls to be used for querying the openFDA database.
+            """,
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "url": {
+                        'type': 'array',
+                        'items': {
+                        'type': 'string'
+                        },
+                        'description': """
+                        This array contains the 'urls', which represent the actual query to be put into openFDA database, searching for relevant information. It should follow the syntax of openFDA API.
+                        """
+                    },
+                },
+                "required": ["url"]
             }
         }
     }
@@ -68,8 +96,8 @@ tools_for_search_term= [
 
 
 
-#similarity search with langchain
-Prompt_template = """
+#Defining templates to be used inside chatGPT
+RAG_Prompt_template = """
 The 'Context' provided consists of openFDA functions. Determine which openFDA functions could be helpful in answering the given question and extract their properties. Multiple outputs are possible.
 It is highly recommended to use your own knowledge about the syntax of openFDA
 \n\n
@@ -78,17 +106,19 @@ Context: {context}
 Question: {question}
 """
 
-#similarity search with langchain
+NativeGPT_Prompt_template = """
+{question}
+\n\n
+Please write openFDA queries to get the information above
+"""
+
+
 Search_term_template = """
-This function formulates 'search terms' as queries by pairing identified 'properties' with specific keywords or phrases relevant to the question. Properties' denote the searchable fields or domains, and the 'search terms' are constructed in a query format that links these 'properties' with exact keywords. This ‘search terms’ will eventually be used for querying to openFDA API.
-Input:
-* 		Properties: The searchable fields or domains pertinent to the question.
-* 		Question: The specific inquiry guiding the pairing of keywords with 'properties'.
-Output: A singular or list of 'search terms' formatted as queries, such as search=property:"keyword"
+This function is designed to generate 'search terms' for generating queries to be fed into the openFDA API. 'Properties' denote the searchable fields or domains pertinent to the query, and the 'search terms' are constructed in a query format that links these 'properties' with exact keywords It's crucial to utilize your knowledge of the openFDA query syntax when deciding on the 'search terms'!. If you believe the provided 'properties' are incorrect or incomplete, feel free to modify them accordingly to ensure the accuracy and relevance of the 'search terms'. These 'search terms' will be the queries used for searching the openFDA database.
 
-Decide the search terms based on the following properties and question.\n
-It is highly recommended for you to use your own knowledge about the syntax of openFDA\n\n
-
+Decide the search terms below.
+\n
+\n
 properties: {json_response}
 \n
 question: {question}
@@ -97,21 +127,34 @@ search_terms:
 """
 
 class Extractor(ABC):
-
+    """
+    Desined to outline the structure and required methods for different types of extractors within the system.
+    """
     @abstractmethod
-    def gpt_extract(self):
-        #Extract attributes using gpt
+    def RAG_extract(self):
+        #Extract attributes using RAG
         pass
 
 
 
 
 class Extract_property(Extractor):
+    """
+    Perform the 'property' extraction process specific to the extractor's purpose. 
+
+    Returns:
+        The structured output produced by the extraction process, ready for further use within the system.
+    """
     def __init__(self, user_request):
         self.user_request = user_request
 
-    #pararral function calling으로 수정
-    def gpt_extract(self):
+    def RAG_extract(self):
+        """
+        Extracts the 'properties' relevant to openFDA functions that are helpful to answer the given user request. This method leverages the GPT model to understand and interpret the user request, identifying and extracting key 'properties' that can be used to formulate targeted queries against the openFDA database.
+
+        Returns:
+            list: A list of strings where each string represents a distinct 'property' relevant to the user's request.
+        """
         response = client.chat.completions.create(
             model = 'gpt-4-turbo-preview',
             messages = [
@@ -129,13 +172,39 @@ class Extract_property(Extractor):
         json_response = json.loads(response.choices[0].message.content)['properties']
         return json_response
     
+    def GPT_native_extract(self):
+        """
+        Generates complete query URLs based on the user's request. 
+
+        Returns:
+            list: A list of complete query URLs, each formatted according to the openFDA API syntax.
+        """
+        response = client.chat.completions.create(
+            model = 'gpt-4-turbo-preview',
+            messages = [
+                {'role': 'system', 'content': "You are a system that generates urls to query openFDA database."},
+                {"role": "user", "content": self.user_request}
+                ],
+            tools = tools_for_url,
+            tool_choice = 'auto',
+            temperature = 0.5,
+        )
+        json_response = json.loads(response.choices[0].message.tool_calls[0].function.arguments)
+        json_response_2 = json_response['url']
+        return json_response_2
+
 
 class Extract_search_term(Extractor):
     def __init__(self, prompt):
         self.prompt = prompt
 
-    #Few shot prompt로 수정.
-    def gpt_extract(self):
+    def RAG_extract(self):
+        """
+        Generate the ’search term’ relevant to extracted properties of openFDA functions and given user question.
+
+        Returns:
+            list: A list of strings where each string represents a distinct ‘search term’
+        """
         response = client.chat.completions.create(
             model = 'gpt-4-turbo-preview',
             messages = [
@@ -152,13 +221,10 @@ class Extract_search_term(Extractor):
         result = json.loads(response.choices[0].message.tool_calls[0].function.arguments)['search_terms']
         return result
 
-
-def make_prompt(context_prompt):
-    context = context_prompt['context']
-    question = context_prompt['question']
-    return Prompt_template.format(context=context, question=question)
-
 def find_source(context, json_response):
+    """
+    Find the source of the property in the context. Source means the category of the openFDA API endpoint.
+    """
     property_source_pairs = []
     for doc in context:
         page_content = json.loads(doc.page_content)
@@ -172,41 +238,99 @@ def find_source(context, json_response):
     return endpoints
 
 
-def generate_url_wrapper(context_prompt):
-    #Extract context and question
+def generate_url_RAG(context_prompt):
+    """
+    Generate urls using RAG model
+    """
     context = context_prompt['context']
+    #Extract context and question
     question = context_prompt['question']
     #Formulate first query
-    user_request = Prompt_template.format(context=context, question=question)
+    user_request = RAG_Prompt_template.format(context=context, question=question)
     Property_generator = Extract_property(user_request)
-    json_response = Property_generator.gpt_extract()
+    json_response = Property_generator.RAG_extract()
     #Formulate second query
     formatted_search_term_template = Search_term_template.format(json_response=json.dumps(json_response), question=question) # json_response를 문자열로 변환하여 사용
     Searchterm_generator = Extract_search_term(formatted_search_term_template)
-    final_result = Searchterm_generator.gpt_extract()
+    final_result = Searchterm_generator.RAG_extract()
     sources = find_source(context, json_response)
-    #Generate final url to be fed into openFDA
-
-    return {'json_response': json_response, 'final_result': final_result, 'sources': sources, 'question': question}
-
-def return_openfda_data(query_result):
-    final_result = query_result['final_result']
-    sources = query_result['sources']
-    question = query_result['question']
-    openfda_data_list = []
+    urls = []
     for result, source in zip(final_result, sources):
         url = f"https://api.fda.gov/{source}.json?api_key={OPENFDA_API_KEY}&search={result}"
+        urls.append(url)
+    return {'urls': urls, 'question': question}
+
+
+def generate_url_nativeGPT(context_prompt):
+    """
+    Generate urls using NativeGPT model
+    """
+    #Extract context and question
+    question = context_prompt['question']
+    #Formulate query
+    user_request = NativeGPT_Prompt_template.format(question=question)
+    Property_generator = Extract_property(user_request)
+    urls = Property_generator.GPT_native_extract()
+    #insert api_key parameter inside each urls
+    new_urls = []
+    for url in urls:
+        index = str.find(url, "search=")
+        if index != -1:
+            new_url = url[:index] + "api_key=" + OPENFDA_API_KEY + "&" + url[index:]
+            new_urls.append(new_url)
+        else:
+            new_urls = urls
+    return {'urls': new_urls, 'question': question}
+
+
+def combine_url(urls):
+    """
+    Combine the urls from the two models
+    """
+    total_urls = []
+    url1 = urls['result1']
+    url2 = urls['result2']
+
+    for comp in url1['urls']:
+        total_urls.append(comp)
+    for comp in url2['urls']:
+        total_urls.append(comp)
+
+    question = url1['question']
+    return {'total_urls': total_urls, 'question': question}
+
+def return_openfda_data(urls_with_question):
+    """
+    Return the openFDA data from the given urls
+    """
+    urls = urls_with_question['total_urls']
+    question = urls_with_question['question']
+    returned_responses = []
+    for url in urls:
         response = requests.get(url)
         data = response.json()
+        #Check if the response id valid
+        error_present = False
+        for key in data:
+            if key == 'error':
+                error_present = True
+                break
+        if error_present:
+            continue
+        
+        #Extract core information inside the response
         if "results" in data:
             openfda_data = data["results"]
-            openfda_data.append(f"query: {result}")
         else:
             openfda_data = data
-            openfda_data['query']=result
         remove_openfda_key(openfda_data, 'openfda')
-        openfda_data_list.append(openfda_data)
-    return {'openfda_data_list': openfda_data_list, 'question': question}
+        #Integrate the response with requested url
+        openfda_data_with_url = {}
+        openfda_data_with_url['Requested url'] = url
+        openfda_data_with_url['Result'] = openfda_data
+        returned_responses.append(openfda_data_with_url)
+    return {'openfda_data_list': returned_responses, 'question': question}
+
 
 def remove_openfda_key(d, key):
     """
@@ -226,9 +350,12 @@ def remove_openfda_key(d, key):
         pass
 
 def final_response(openfda_data_list):
+    """
+    Generate final response using GPT model
+    """
     openfda_data = openfda_data_list['openfda_data_list']
     question = openfda_data_list['question']
-    prompt = f"Answer the below question based on the relevant data extracted from the openFDA database, excluding any entries where errors were encountered. Only consider the data that was successfully returned. \n question: {question} \n openFDA data: {openfda_data_list}"
+    prompt = f"Answer the below question based on the relevant data extracted from the openFDA database, excluding any entries where errors were encountered. Only consider the data that was successfully returned and do not even mention about the failed data. \n question: {question} \n openFDA data: {openfda_data}"
     response = client.chat.completions.create(
         model = 'gpt-4-turbo-preview',
         messages = [
@@ -243,12 +370,14 @@ def final_response(openfda_data_list):
     return result
 
 vector_db = loader.vector_db
-retriever = vector_db.as_retriever() #중복X로 수정
-prompt = ChatPromptTemplate.from_template(Prompt_template)
+retriever = vector_db.as_retriever()
+prompt = ChatPromptTemplate.from_template(RAG_Prompt_template)
+
 
 chain = (
     {"context": retriever, "question": RunnablePassthrough()}
-    | RunnableLambda(generate_url_wrapper)
+    | RunnableParallel({"result1": RunnableLambda(generate_url_nativeGPT), "result2": RunnableLambda(generate_url_RAG)})
+    | RunnableLambda(combine_url)
     | RunnableLambda(return_openfda_data)
     | RunnableLambda(final_response)
 )
