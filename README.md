@@ -48,7 +48,6 @@ The DrugChat_openFDA is a tool designed to answer users' questions with official
 ## Example
 Here are a few example questions you might try:
 
-
 > **Question**
 > : "What are the side effects of aspirin?"
 > 
@@ -81,12 +80,14 @@ Here are a few example questions you might try:
 > 5. **Pregnancy and Breastfeeding Warnings:** Pregnant or breastfeeding individuals are advised to consult a health professional before use. It is particularly important not to use aspirin during the last 3 months of pregnancy unless directed by a doctor, as it may cause problems in the unborn child or complications during delivery.
 > 
 > It is essential for individuals to follow the directions for use carefully and to consult a healthcare professional if any concerns or adverse effects arise while using aspirin."
+---
 
 
 > **Question**: "Has there been any recall on Metformin?"
 > 
 > **Answer**: "Yes, there has been a recall on Metformin. The recalls have been issued by various firms for reasons such as CGMP Deviations, Presence of Foreign Tablets/Capsules, Labeling issues, Defective Delivery System, and Presence of Foreign Tablets. These recalls affected numerous lots of Metformin and Metformin-containing products across different states and were classified mostly as Class II or Class III recalls. The specific reasons for recall included issues like detection of N-Nitrosodimethylamine (NDMA) impurity above the acceptable intake level, labeling mix-ups, defective delivery systems such as tablets missing laser drilling, presence of foreign substances, and packaging without inner seals."
 
+---
 
 > **Question**: "What adverse events are associated with Lexapro?"
 > 
